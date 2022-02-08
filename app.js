@@ -5,12 +5,14 @@ const bodyparser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
 const encrypt = require("mongoose-encryption");
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
 mongoose.connect("mongodb://localhost:27017/userDB");
 const userSchema = new mongoose.Schema({
     email: String,
     password: String
 });
-userSchema.plugin(encrypt, { secret: process.env.SECRET, encryptedFields: ['password'] });
+//userSchema.plugin(encrypt, { secret: process.env.SECRET, encryptedFields: ['password'] });
 const User = mongoose.model("User", userSchema);
 app.set('view engine', 'ejs');
 app.use(bodyparser.urlencoded({ extended: true }));
@@ -24,11 +26,19 @@ app.route("/login")
     })
     .post(function (req, res) {
         const username = req.body.username;
-        const password = req.body.password;
+        const password = (req.body.password);
         User.findOne({ email: username }, function (err, foundUser) {
             if (!err) {
-                if (foundUser.password == password)
-                    res.render("secrets.ejs");
+                if (foundUser) {
+                    bcrypt.compare(req.body.password, foundUser.password, function (err, result) {
+                        if (result == true) {
+                            res.render("secrets.ejs");
+                        }
+                        else
+                            res.send("Failed");
+
+                    });
+                }
                 else
                     res.send("User Not Found");
             }
@@ -42,17 +52,19 @@ app.route("/register")
         res.render("register.ejs");
     })
     .post(function (req, res) {
-        const user = new User({
-            email: req.body.username,
-            password: req.body.password
-        });
-        user.save(function (err) {
-            if (!err)
-                res.render("secrets.ejs");
-            else
-                res.send(err);
+        bcrypt.hash(req.body.password, saltRounds, function (err, hash) {
+            const user = new User({
+                email: req.body.username,
+                password: hash
+            });
+            user.save(function (err) {
+                if (!err)
+                    res.render("secrets.ejs");
+                else
+                    res.send(err);
 
-        });
+            });
+        })
     });
 app.listen(3000, function () {
     console.log("Server Started");
